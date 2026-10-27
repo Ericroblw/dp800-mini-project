@@ -1,66 +1,68 @@
 import json
 import pyodbc
 from sentence_transformers import SentenceTransformer
+from db import get_connection
 
 def run_embedding_pipeline():
-    print("--- INICIANDO PIPELINE ETL DE EMBEDDINGS (BLOQUE E) ---")
+    # 1. Carga del modelo denso de embeddings (384 dimensiones)
+    model_name = "all-MiniLM-L6-v2"
+    print(f"[*] Cargando modelo de embeddings ({model_name})...")
+    model = SentenceTransformer(model_name)
 
-    # 1. Cargar modelo de embeddings en memoria local
-    print("Cargando modelo local all-MiniLM-L6-v2...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-
-    # 2. Conectar a SQL Server 2025
-    conn_str = (
-        "DRIVER={ODBC Driver 18 for SQL Server};"
-        "SERVER=localhost;"
-        "DATABASE=ControlAccesosIA;"
-        "Trusted_Connection=yes;"
-        "TrustServerCertificate=yes;"
-    )
-
-    conn = pyodbc.connect(conn_str)
-    cursor = conn.cursor()
+    # 2. Conexión a la base de datos mediante el conector modular
+    print("[*] Conectando a SQL Server...")
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+    except Exception as e:
+        print(f"[!] Error de conexión a la base de datos: {e}")
+        return
 
     try:
-        # 3. Extraer incidencias pendientes de vectorización
-        cursor.execute("""
+        # 3. Extracción: Obtener solo incidencias pendientes de vectorizar
+        query_select = """
             SELECT incidencia_id, texto_justificacion
             FROM dbo.IncidenciasJustificaciones
             WHERE embedding_justificacion IS NULL;
-        """)
+        """
+        cursor.execute(query_select)
         registros = cursor.fetchall()
 
         if not registros:
-            print("No hay registros pendientes de vectorizar. Todo el dataset está al día.")
+            print("[+] No hay incidencias pendientes de vectorizar. Todo el dataset está sincronizado.")
             return
 
-        print(f"Se encontraron {len(registros)} registros para procesar.")
+        print(f"[*] Registros detectados para procesar: {len(registros)}")
 
-        # 4. Transformar y Cargar (Bucle de inferencia y actualización)
-        for row in registros:
-            incidencia_id = row.incidencia_id
-            texto = row.texto_justificacion
+        # 4. Transformación y Carga: Cálculo de embeddings e inyección T-SQL
+        query_update = """
+            UPDATE dbo.IncidenciasJustificaciones
+            SET embedding_justificacion = CAST(CAST(? AS NVARCHAR(MAX)) AS VECTOR(384))
+            WHERE incidencia_id = ?;
+        """
 
-            print(f"Procesando Incidencia ID {incidencia_id}: '{texto[:50]}...'")
+        for reg in registros:
+            incidencia_id = reg.incidencia_id
+            texto = reg.texto_justificacion
 
-            # Inferencia del modelo local
-            embedding = model.encode(texto)
-            embedding_json = json.dumps(embedding.tolist())
+            # Inferencia: generación del vector denso de 384 floats
+            vector = model.encode(texto).tolist()
+            vector_json = json.dumps(vector)
 
-            # Actualización en base de datos con casteo explícito a VECTOR(384)
-            cursor.execute("""
-                UPDATE dbo.IncidenciasJustificaciones
-                SET embedding_justificacion = CAST(CAST(? AS NVARCHAR(MAX)) AS VECTOR(384))
-                WHERE incidencia_id = ?;
-            """, (embedding_json, incidencia_id))
+            # Persistencia con casteo doble explícito
+            cursor.execute(query_update, (vector_json, incidencia_id))
+            print(f"  [✓] Incidencia ID {incidencia_id} vectorizada y actualizada.")
 
-        # Confirmar la transacción
+        # Confirmación transaccional en el motor
         conn.commit()
-        print("\n-> ¡Pipeline completado con éxito! Registros actualizados en SQL Server.")
+        print("\n[+] Proceso ETL finalizado con éxito. Transacción consolidada (COMMIT).")
 
-    except Exception as e:
+    except pyodbc.Error as db_err:
         conn.rollback()
-        print(f"\n[ERROR] El pipeline falló y se aplicó rollback: {e}")
+        print(f"[!] Error en la transacción de SQL Server (Rollback aplicado): {db_err}")
+    except Exception as ex:
+        conn.rollback()
+        print(f"[!] Error inesperado durante el pipeline: {ex}")
     finally:
         cursor.close()
         conn.close()

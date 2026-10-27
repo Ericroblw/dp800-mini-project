@@ -159,7 +159,7 @@ Validación de la función `VECTOR_DISTANCE` aplicada en T-SQL, clasificando las
 ### 6.3 Despliegue del Motor de Inferencia Local (Bloque G)
 Verificación de que el modelo Llama 3.2 ha sido provisionado correctamente en el entorno de escritorio del desarrollador.
 
-![Modelo Ollama Provisionado](docs/evidences/05_ollama_model_ready.png)
+![Modelo Ollama Provisionado](docs/evidencias/05_ollama_model_ready.png)
 
 ### 6.4 Arquitectura RAG Híbrida y Mitigación de Alucinaciones (Bloque G)
 Capturas de la consola de auditoría que demuestran el funcionamiento del *Grounding*. 
