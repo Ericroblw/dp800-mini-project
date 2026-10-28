@@ -1,6 +1,6 @@
 ### `bitacora_ai.md`
 
-```markdown
+
 # Bitácora de Desarrollo Asistido por IA (Bloque B - DP-800)
 
 Registro formal de interacción técnica, diagnóstico y corrección de incidencias durante el desarrollo del sistema de auditoría con SQL Server 2025 y RAG.
@@ -46,7 +46,7 @@ Registro formal de interacción técnica, diagnóstico y corrección de incidenc
    UPDATE dbo.IncidenciasJustificaciones 
    SET embedding_justificacion = CAST(CAST(? AS NVARCHAR(MAX)) AS VECTOR(384)) 
    WHERE incidencia_id = ?;
-   ```
+  
 
 
    ## Caso 3: Mitigación de alucinaciones en RAG mediante enriquecimiento relacional (Bloque G)
